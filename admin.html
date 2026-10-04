@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard | Brew & Bean</title>
+    <link rel="stylesheet" href="style.css">
+
+    <!-- jQuery & jQuery Validation Library -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jquery-validation@1.19.5/dist/jquery.validate.min.js"></script>
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="logo">BREW & BEAN (ADMIN)</div>
+        <div class="user-info">
+            <span id="adminWelcome">Welcome, admin!</span>
+            <button id="logoutBtn" class="btn-logout">Logout</button>
+        </div>
+    </nav>
+
+    <main class="admin-container">
+        
+        <header class="admin-header">
+            <h1>Admin Management Dashboard</h1>
+            <p>Manage coffee menu items, prices, and system settings.</p>
+        </header>
+
+        <section class="admin-stats">
+            <div class="stat-card">
+                <h3>Total Menu Items</h3>
+                <span id="totalItemsCount">6</span>
+            </div>
+            <div class="stat-card">
+                <h3>Status</h3>
+                <span class="status-active">Active Session</span>
+            </div>
+        </section>
+
+        <div class="admin-grid">
+
+            <section class="admin-card">
+                <h2>Add New Coffee Item</h2>
+                <div id="adminAlert" class="alert-message"></div>
+
+                <form id="addMenuForm">
+                    <div class="form-group">
+                        <label for="itemName">Item Name</label>
+                        <input type="text" id="itemName" name="itemName" placeholder="e.g. Hazelnut Latte">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="itemPrice">Price (₱)</label>
+                        <input type="number" id="itemPrice" name="itemPrice" step="0.01" placeholder="e.g. 160.00">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="itemDescription">Description</label>
+                        <textarea id="itemDescription" name="itemDescription" rows="3" placeholder="Enter item description..."></textarea>
+                    </div>
+
+                    <button type="submit" class="btn-auth">Add Item to Menu</button>
+                </form>
+            </section>
+
+            <section class="admin-card">
+                <h2>Manage Current Menu</h2>
+                <div class="table-responsive">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Price</th>
+                                <th>Description</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="menuTableBody">
+                            <!-- Dynamically populated -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+        </div>
+
+        <section class="admin-card live-menu-section" style="margin-top: 30px;">
+            <h2>Live Menu Preview</h2>
+            <div class="menu-grid" id="adminMenuPreview">
+                <!-- Dynamically populated preview cards -->
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        $(document).ready(function() {
+            // Check Access: Admin Session Only
+            const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+
+            if (!currentUser || currentUser.username !== 'admin') {
+                alert('Access denied! Only admin can access this page.');
+                window.location.href = 'login.html';
+                return;
+            }
+
+            $('#adminWelcome').text(`Welcome, ${currentUser.username}!`);
+
+            // Logout Action
+            $(document).on('click', '#logoutBtn', function(e) {
+                e.preventDefault();
+                localStorage.removeItem('currentUser');
+                window.location.href = 'login.html';
+            });
+
+            // Default Menu Data
+            let defaultMenu = [
+                { name: "Caramel Macchiato", price: 165.00, desc: "Freshly steamed milk with vanilla-flavored syrup, marked with espresso and topped with caramel drizzle." },
+                { name: "Spanish Latte", price: 150.00, desc: "Rich espresso combined with sweetened condensed milk and silky smooth steamed milk." },
+                { name: "Americano", price: 120.00, desc: "Espresso shots topped with hot water to produce a light layer of crema." },
+                { name: "Cold Brew", price: 140.00, desc: "Slow-steeped in cool water for 20 hours to bring out smooth, sweet flavor profile." },
+                { name: "Mocha Frappe", price: 175.00, desc: "Coffee with rich mocha sauce, blended with milk and ice, topped with whipped cream." },
+                { name: "Matcha Oat Latte", price: 180.00, desc: "Premium ceremonial grade matcha blended smooth with creamy oat milk." }
+            ];
+
+            let customMenu = JSON.parse(localStorage.getItem('customMenu')) || defaultMenu;
+            let editingIndex = -1;
+
+            function renderAdminViews() {
+                const tbody = $('#menuTableBody');
+                const previewGrid = $('#adminMenuPreview');
+
+                tbody.empty();
+                previewGrid.empty();
+
+                customMenu.forEach((item, index) => {
+                    if (editingIndex === index) {
+                        const editRow = `
+                            <tr class="editing-row">
+                                <td><input type="text" id="editName_${index}" value="${item.name}" class="edit-input"></td>
+                                <td>₱<input type="number" id="editPrice_${index}" value="${item.price}" step="0.01" class="edit-input price-input"></td>
+                                <td><input type="text" id="editDesc_${index}" value="${item.desc || ''}" class="edit-input"></td>
+                                <td>
+                                    <button class="btn-save" onclick="saveMenuItem(${index})">Save</button>
+                                    <button class="btn-cancel" onclick="cancelEdit()">Cancel</button>
+                                </td>
+                            </tr>
+                        `;
+                        tbody.append(editRow);
+                    } else {
+                        const viewRow = `
+                            <tr>
+                                <td><strong>${item.name}</strong></td>
+                                <td>₱${parseFloat(item.price).toFixed(2)}</td>
+                                <td style="font-size: 0.85rem; color: #555;">${item.desc || 'No description'}</td>
+                                <td>
+                                    <button class="btn-edit" onclick="enableEdit(${index})">Edit</button>
+                                    <button class="btn-delete" onclick="deleteMenuItem(${index})">Delete</button>
+                                </td>
+                            </tr>
+                        `;
+                        tbody.append(viewRow);
+                    }
+
+                    const card = `
+                        <div class="menu-card">
+                            <h3>${item.name}</h3>
+                            <p>${item.desc || 'Freshly brewed premium coffee.'}</p>
+                            <span class="price">₱${parseFloat(item.price).toFixed(2)}</span>
+                        </div>
+                    `;
+                    previewGrid.append(card);
+                });
+
+                $('#totalItemsCount').text(customMenu.length);
+            }
+
+            renderAdminViews();
+
+            window.enableEdit = function(index) {
+                editingIndex = index;
+                renderAdminViews();
+            };
+
+            window.cancelEdit = function() {
+                editingIndex = -1;
+                renderAdminViews();
+            };
+
+            window.saveMenuItem = function(index) {
+                const updatedName = $(`#editName_${index}`).val().trim();
+                const updatedPrice = parseFloat($(`#editPrice_${index}`).val());
+                const updatedDesc = $(`#editDesc_${index}`).val().trim();
+
+                if (!updatedName || isNaN(updatedPrice) || updatedPrice <= 0) {
+                    alert('Please enter a valid item name and price!');
+                    return;
+                }
+
+                customMenu[index] = { name: updatedName, price: updatedPrice, desc: updatedDesc };
+                localStorage.setItem('customMenu', JSON.stringify(customMenu));
+
+                editingIndex = -1;
+                renderAdminViews();
+
+                $('#adminAlert')
+                    .text(`Successfully updated "${updatedName}"!`)
+                    .attr('class', 'alert-message alert-success')
+                    .show();
+
+                setTimeout(() => $('#adminAlert').fadeOut(), 3000);
+            };
+
+            $('#addMenuForm').validate({
+                rules: {
+                    itemName: { required: true, minlength: 3 },
+                    itemPrice: { required: true, number: true, min: 1 },
+                    itemDescription: { required: true, minlength: 5 }
+                },
+                messages: {
+                    itemName: { required: "Please enter coffee name.", minlength: "At least 3 characters required." },
+                    itemPrice: { required: "Please enter price.", number: "Valid number required.", min: "Must be > ₱0." },
+                    itemDescription: { required: "Please add description.", minlength: "At least 5 characters required." }
+                },
+                submitHandler: function(form) {
+                    const newName = $('#itemName').val().trim();
+                    const newPrice = parseFloat($('#itemPrice').val());
+                    const newDesc = $('#itemDescription').val().trim();
+
+                    customMenu.push({ name: newName, price: newPrice, desc: newDesc });
+                    localStorage.setItem('customMenu', JSON.stringify(customMenu));
+
+                    renderAdminViews();
+
+                    $('#adminAlert')
+                        .text(`Successfully added "${newName}" to the menu!`)
+                        .attr('class', 'alert-message alert-success')
+                        .show();
+
+                    $('#addMenuForm')[0].reset();
+                    setTimeout(() => $('#adminAlert').fadeOut(), 3000);
+                }
+            });
+
+            window.deleteMenuItem = function(index) {
+                if (confirm(`Are you sure you want to delete "${customMenu[index].name}"?`)) {
+                    customMenu.splice(index, 1);
+                    localStorage.setItem('customMenu', JSON.stringify(customMenu));
+                    renderAdminViews();
+                }
+            };
+        });
+    </script>
+
+</body>
+</html>

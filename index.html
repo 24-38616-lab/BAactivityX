@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coffee Menu | Brew & Bean</title>
+    <link rel="stylesheet" href="style.css">
+
+    <!-- jQuery CDN -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="logo">BREW & BEAN</div>
+        <div class="user-info">
+            <span id="welcomeUser">Welcome, Guest</span>
+            
+            <button id="cartToggleBtn" class="btn-cart">
+                🛒 Cart <span id="cartBadge" class="badge">0</span>
+            </button>
+
+            <button id="logoutBtn" class="btn-logout">Logout</button>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <h1>Our Handcrafted Menu</h1>
+        <p>Freshly roasted beans, brewed to perfection daily.</p>
+    </header>
+
+    <main class="menu-container">
+        <h2 class="menu-title">Espresso & Coffee</h2>
+
+        <div class="menu-grid">
+            <!-- Dynamically loaded from Admin updates -->
+        </div>
+    </main>
+
+    <!-- SIDEBAR CART MODAL -->
+    <div id="cartModal" class="cart-modal">
+        <div class="cart-content">
+            <div class="cart-header">
+                <h2>Your Shopping Cart</h2>
+                <button id="closeCartBtn" class="close-btn">&times;</button>
+            </div>
+
+            <div id="cartItemsContainer" class="cart-items"></div>
+
+            <div class="cart-summary">
+                <div class="summary-row total">
+                    <span>Grand Total:</span>
+                    <span id="totalPrice">₱0.00</span>
+                </div>
+
+                <div class="cart-actions">
+                    <button onclick="clearCart()" class="btn-clear">Clear Cart</button>
+                    <button onclick="checkout()" class="btn-checkout">Checkout Now</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            // Authentication Check
+            const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+
+            if (!currentUser) {
+                window.location.href = 'login.html';
+                return;
+            }
+
+            $('#welcomeUser').text(`Hello, ${currentUser.username}!`);
+
+            // If Admin is on this page, show Admin Dashboard link
+            if (currentUser.username === 'admin') {
+                $('#cartToggleBtn').replaceWith(
+                    '<a href="admin.html" class="btn-cart" style="text-decoration: none; background-color: #27ae60;">⚙️ Admin Dashboard</a>'
+                );
+            }
+
+            // Logout Action
+            $(document).on('click', '#logoutBtn', function(e) {
+                e.preventDefault();
+                localStorage.removeItem('currentUser');
+                window.location.href = 'login.html';
+            });
+
+            // Cart Modal Actions
+            $(document).on('click', '#cartToggleBtn', function() {
+                $('#cartModal').addClass('active');
+            });
+
+            $(document).on('click', '#closeCartBtn', function() {
+                $('#cartModal').removeClass('active');
+            });
+
+            $(window).on('click', function(e) {
+                if ($(e.target).is('#cartModal')) $('#cartModal').removeClass('active');
+            });
+
+            renderUserMenu();
+            renderCart();
+        });
+
+        // Default Menu Data
+        let defaultMenu = [
+            { name: "Caramel Macchiato", price: 165.00, desc: "Freshly steamed milk with vanilla-flavored syrup, marked with espresso and topped with caramel drizzle." },
+            { name: "Spanish Latte", price: 150.00, desc: "Rich espresso combined with sweetened condensed milk and silky smooth steamed milk." },
+            { name: "Americano", price: 120.00, desc: "Espresso shots topped with hot water to produce a light layer of crema." },
+            { name: "Cold Brew", price: 140.00, desc: "Slow-steeped in cool water for 20 hours to bring out smooth, sweet flavor profile." },
+            { name: "Mocha Frappe", price: 175.00, desc: "Coffee with rich mocha sauce, blended with milk and ice, topped with whipped cream." },
+            { name: "Matcha Oat Latte", price: 180.00, desc: "Premium ceremonial grade matcha blended smooth with creamy oat milk." }
+        ];
+
+        // Render Menu (mula sa LocalStorage na in-edit ng Admin)
+        function renderUserMenu() {
+            let currentMenu = JSON.parse(localStorage.getItem('customMenu')) || defaultMenu;
+            const grid = $('.menu-grid');
+            grid.empty();
+
+            currentMenu.forEach(item => {
+                const card = `
+                    <div class="menu-card">
+                        <h3>${item.name}</h3>
+                        <p>${item.desc || 'Freshly brewed coffee.'}</p>
+                        <span class="price">₱${parseFloat(item.price).toFixed(2)}</span>
+                        <button onclick="addToCart('${item.name}', ${item.price})">Add to Cart</button>
+                    </div>
+                `;
+                grid.append(card);
+            });
+        }
+
+        // --- CART SYSTEM ---
+        let cart = JSON.parse(localStorage.getItem('brewCart')) || [];
+
+        function addToCart(name, price) {
+            const existingItem = cart.find(item => item.name === name);
+            if (existingItem) {
+                existingItem.quantity += 1;
+            } else {
+                cart.push({ name, price, quantity: 1 });
+            }
+            saveAndUpdateCart();
+            alert(`${name} has been added to your cart!`);
+        }
+
+        function updateQuantity(name, amount) {
+            const item = cart.find(i => i.name === name);
+            if (item) {
+                item.quantity += amount;
+                if (item.quantity <= 0) {
+                    cart = cart.filter(i => i.name !== name);
+                }
+            }
+            saveAndUpdateCart();
+        }
+
+        function removeItem(name) {
+            cart = cart.filter(i => i.name !== name);
+            saveAndUpdateCart();
+        }
+
+        function clearCart() {
+            if (cart.length === 0) return;
+            if (confirm("Are you sure you want to clear your cart?")) {
+                cart = [];
+                saveAndUpdateCart();
+            }
+        }
+
+        function saveAndUpdateCart() {
+            localStorage.setItem('brewCart', JSON.stringify(cart));
+            renderCart();
+        }
+
+        function renderCart() {
+            const container = $('#cartItemsContainer');
+            container.empty();
+
+            let totalQuantity = 0;
+            let grandTotal = 0;
+
+            if (cart.length === 0) {
+                container.html('<p class="empty-cart-msg">Your cart is empty.</p>');
+            } else {
+                cart.forEach(item => {
+                    const itemTotal = item.price * item.quantity;
+                    grandTotal += itemTotal;
+                    totalQuantity += item.quantity;
+
+                    const cartRow = `
+                        <div class="cart-item">
+                            <div class="cart-item-info">
+                                <h4>${item.name}</h4>
+                                <p>₱${item.price.toFixed(2)} x ${item.quantity} = <strong>₱${itemTotal.toFixed(2)}</strong></p>
+                            </div>
+                            <div class="cart-item-controls">
+                                <button onclick="updateQuantity('${item.name}', -1)">-</button>
+                                <span>${item.quantity}</span>
+                                <button onclick="updateQuantity('${item.name}', 1)">+</button>
+                                <button class="btn-remove" onclick="removeItem('${item.name}')">🗑️</button>
+                            </div>
+                        </div>
+                    `;
+                    container.append(cartRow);
+                });
+            }
+
+            $('#cartBadge').text(totalQuantity);
+            $('#totalPrice').text(`₱${grandTotal.toFixed(2)}`);
+        }
+
+        function checkout() {
+            if (cart.length === 0) {
+                alert("Your cart is currently empty!");
+                return;
+            }
+            alert("Thank you for your order! Your coffee will be prepared shortly.");
+            cart = [];
+            saveAndUpdateCart();
+            $('#cartModal').removeClass('active');
+        }
+    </script>
+</body>
+</html>
